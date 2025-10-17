@@ -131,9 +131,20 @@ public:
            reinterpret_cast<const sockaddr *>(&peers[to]), sizeof(sockaddr_in));
   }
 
+  void every(Clock::duration period, std::function<void()> f) {
+    timers.push_back({period, Clock::now() + period, std::move(f)});
+  }
+
 private:
+  struct Timer {
+    Clock::duration period;
+    Clock::time_point next;
+    std::function<void()> f;
+  };
+
   int fd;
   std::vector<sockaddr_in> peers;
+  std::vector<Timer> timers;
 
   void receive() {
     static char buf[1 << 16];
@@ -143,6 +154,22 @@ private:
         break;
       on_receive(std::string_view(buf, static_cast<size_t>(len)));
     }
+  }
+  void run_timers() {
+    Clock::time_point now = Clock::now();
+    for (Timer &t : timers)
+      if (now >= t.next) {
+        t.f();
+        t.next = now + t.period;
+      }
+  }
+  timeval until_next_timer() const {
+    Clock::duration wait = 1s;
+    Clock::time_point now = Clock::now();
+    for (const Timer &t : timers)
+      wait = std::min(wait, t.next - now);
+    auto us = std::max<long long>(0, std::chrono::duration_cast<std::chrono::microseconds>(wait).count());
+    return {static_cast<time_t>(us / 1000000), static_cast<suseconds_t>(us % 1000000)};
   }
 
   friend class Loop;
@@ -231,7 +258,8 @@ public:
       FD_SET(net.fd, &fds);
       if (want)
         FD_SET(STDIN_FILENO, &fds);
-      int r = select(net.fd + 1, &fds, nullptr, nullptr, nullptr);
+      timeval tv = net.until_next_timer();
+      int r = select(net.fd + 1, &fds, nullptr, nullptr, &tv);
       if (r < 0 && errno != EINTR) {
         std::perror("select");
         break;
@@ -242,6 +270,7 @@ public:
         in.fill();
       while (in.has_line())
         consume(in.line());
+      net.run_timers();
       out.flush();
     }
     out.flush();

@@ -1,19 +1,15 @@
-// Fair-loss links: a line `ID text` sends `text` to process `ID` in one datagram.
-
-#include "net.hpp"
+#include "links.hpp"
 
 int main(int argc, char **argv) {
   Options o = options(argc, argv, "usage: links ID HOST:PORT...");
   Net net(o);
+  PerfectLinks pl(net);
   Output out;
-  net.on_receive = [&](std::string_view d) {
-    Reader r{d};
-    uint32_t from = r.u32();
-    if (!r.ok || from >= net.n)
-      return;
-    out.line(std::to_string(from + 1) + " " + Bytes(r.rest));
+  pl.on_deliver = [&](unsigned from, std::string_view msg) {
+    out.line(std::to_string(from + 1) + " " + Bytes(msg));
   };
 
+  // a line `ID text` sends `text` to process `ID`
   auto send = [&](std::string_view line) {
     size_t space = line.find(' ');
     unsigned long id = std::strtoul(Bytes(line.substr(0, space)).c_str(), nullptr, 10);
@@ -21,10 +17,7 @@ int main(int argc, char **argv) {
       std::fprintf(stderr, "lines are `ID text`, ID from 1 to %u\n", net.n);
       return;
     }
-    Bytes d;
-    put32(d, net.self);
-    d += line.substr(space + 1);
-    net.send(static_cast<unsigned>(id - 1), d);
+    pl.send(static_cast<unsigned>(id - 1), Bytes(line.substr(space + 1)));
   };
 
   Loop::run(net, out, send);
