@@ -5,8 +5,9 @@
 // https://chutommy.com/dist-algorithms#perfect-links
 //
 // 1. Messages are numbered per destination and acknowledged one by one.
-// 2. A message is retransmitted after a timeout that follows the measured
-// round-trip time and doubles when it expires, as in TCP.
+// 2. A message is retransmitted once three later ones are acknowledged (TCP's
+// fast retransmit), or after a timeout that follows the measured round-trip
+// time and doubles when it expires.
 
 #include <algorithm>
 #include <cassert>
@@ -69,6 +70,7 @@ private:
   struct Message {
     Bytes data;
     Clock::time_point at{};            // last transmission
+    unsigned later = 0;                // later messages acknowledged since then
     bool acked = false, again = false; // again: transmitted more than once
   };
   // queue[i] is message base + i; messages below `sent` have been transmitted.
@@ -91,6 +93,7 @@ private:
 
   void transmit(unsigned to, uint32_t seq, Message &m, bool again = false) {
     m.at = Clock::now();
+    m.later = 0;
     m.again |= again;
     net.send(to, header(DATA, net.self, seq) + m.data);
   }
@@ -161,6 +164,11 @@ private:
     acked.data.clear();
     if (!acked.again)
       measure(l, Clock::now() - acked.at);
+    for (uint32_t s = l.base; s < seq; s++) {
+      Message &m = l.queue[s - l.base];
+      if (!m.acked && ++m.later == 3)
+        transmit(to, s, m, true);
+    }
     while (!l.queue.empty() && l.queue.front().acked) {
       l.queue.pop_front();
       l.base++;
