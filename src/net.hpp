@@ -13,6 +13,7 @@
 #include <functional>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <random>
 #include <string>
 #include <string_view>
 #include <sys/select.h>
@@ -60,6 +61,7 @@ struct Reader {
 struct Options {
   unsigned self = 0; // 0-based
   std::vector<sockaddr_in> peers;
+  double loss = 0; // fraction of outgoing datagrams dropped on purpose
 };
 
 [[noreturn]] inline void die(const char *what) {
@@ -90,7 +92,9 @@ inline Options options(int argc, char **argv, const char *usage) {
   std::vector<std::string> rest;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
-    if (a.size() > 1 && a[0] == '-')
+    if (a == "--loss" && i + 1 < argc)
+      o.loss = std::atof(argv[++i]);
+    else if (a.size() > 1 && a[0] == '-')
       die(usage);
     else
       rest.push_back(a);
@@ -113,7 +117,8 @@ public:
   std::function<void(std::string_view datagram)> on_receive;
 
   explicit Net(const Options &o)
-      : self(o.self), n(static_cast<unsigned>(o.peers.size())), peers(o.peers) {
+      : self(o.self), n(static_cast<unsigned>(o.peers.size())), peers(o.peers),
+        loss(o.loss), rng(std::random_device{}()) {
     fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0 || bind(fd, reinterpret_cast<const sockaddr *>(&peers[self]),
                        sizeof(sockaddr_in)) < 0) {
@@ -127,6 +132,8 @@ public:
   Net &operator=(const Net &) = delete;
 
   void send(unsigned to, std::string_view datagram) {
+    if (loss > 0 && std::uniform_real_distribution<double>(0, 1)(rng) < loss)
+      return;
     sendto(fd, datagram.data(), datagram.size(), 0,
            reinterpret_cast<const sockaddr *>(&peers[to]), sizeof(sockaddr_in));
   }
@@ -144,6 +151,8 @@ private:
 
   int fd;
   std::vector<sockaddr_in> peers;
+  double loss;
+  std::mt19937_64 rng;
   std::vector<Timer> timers;
 
   void receive() {

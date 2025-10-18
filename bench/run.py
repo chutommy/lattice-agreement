@@ -3,6 +3,7 @@
 process printed against the guarantees of the algorithm.
 
     bench/run.py links -n 3 -m 10000
+    bench/run.py links -n 3 -m 10000 --loss 0.1
 
 links sends messages 1..m to every other process.
 """
@@ -42,9 +43,10 @@ def check(program, n, m, outs):
                 assert sorted(ks) == list(range(1, m + 1)), f"reliable delivery: {j} is missing messages from {i}"
 
 
-def run(program, n=3, m=10000, timeout=60):
+def run(program, n=3, m=10000, loss=0.0, timeout=60):
     tmp = Path(tempfile.mkdtemp(prefix=f"{program}-"))
     addresses = [f"127.0.0.1:{PORT + i}" for i in range(1, n + 1)]
+    flags = ["--loss", str(loss)] if loss else []
     ids = range(1, n + 1)
     for i in ids:
         (tmp / f"{i}.in").write_text(make_input(program, i, n, m))
@@ -53,7 +55,7 @@ def run(program, n=3, m=10000, timeout=60):
     start = time.monotonic()
     for i in ids:
         with open(tmp / f"{i}.in") as stdin, open(tmp / f"{i}.out", "wb") as stdout, open(tmp / f"{i}.err", "wb") as stderr:
-            procs[i] = subprocess.Popen([str(BIN / program), str(i), *addresses], stdin=stdin, stdout=stdout, stderr=stderr)
+            procs[i] = subprocess.Popen([str(BIN / program), *flags, str(i), *addresses], stdin=stdin, stdout=stdout, stderr=stderr)
     readers = {i: open(tmp / f"{i}.out", "rb") for i in ids}
     lines = dict.fromkeys(ids, 0)
 
@@ -93,9 +95,10 @@ def main():
     parser.add_argument("program", choices=["links"])
     parser.add_argument("-n", type=int, default=3, help="processes (default 3)")
     parser.add_argument("-m", type=int, default=10000, help="messages per process (default 10000)")
+    parser.add_argument("--loss", type=float, default=0.0, help="fraction of datagrams dropped")
     a = parser.parse_args()
     try:
-        seconds = run(a.program, a.n, a.m)
+        seconds = run(a.program, a.n, a.m, a.loss)
     except (AssertionError, TimeoutError) as e:
         sys.exit(f"FAILED: {e}")
     count = (a.n - 1) * a.n * a.m

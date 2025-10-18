@@ -1,7 +1,7 @@
 #include "links.hpp"
 
 int main(int argc, char **argv) {
-  Options o = options(argc, argv, "usage: links ID HOST:PORT...");
+  Options o = options(argc, argv, "usage: links [--loss P] ID HOST:PORT...");
   Net net(o);
   PerfectLinks pl(net);
   Output out;
