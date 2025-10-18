@@ -166,7 +166,7 @@ private:
       measure(l, Clock::now() - acked.at);
     for (uint32_t s = l.base; s < seq; s++) {
       Message &m = l.queue[s - l.base];
-      if (!m.acked && ++m.later == 3)
+      if (!m.acked && m.at <= acked.at && ++m.later == 3)
         transmit(to, s, m, true);
     }
     while (!l.queue.empty() && l.queue.front().acked) {
