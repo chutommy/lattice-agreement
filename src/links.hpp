@@ -4,8 +4,9 @@
 // a message sent to a correct process is delivered there exactly once.
 // https://chutommy.com/dist-algorithms#perfect-links
 //
-// Messages are numbered per destination, acknowledged one by one and
-// retransmitted after a timeout. At most kWindow are unacknowledged.
+// 1. Messages are numbered per destination and acknowledged one by one.
+// 2. A message is retransmitted after a timeout that follows the measured
+// round-trip time and doubles when it expires, as in TCP.
 
 #include <algorithm>
 #include <cassert>
@@ -47,7 +48,6 @@ private:
 class PerfectLinks {
 public:
   static constexpr uint32_t kWindow = 64;
-  static constexpr Clock::duration kTimeout = 50ms;
 
   Net &net;
   std::function<void(unsigned from, std::string_view msg)> on_deliver;
@@ -55,7 +55,7 @@ public:
   explicit PerfectLinks(Net &net)
       : net(net), out(net.n), in(net.n, SlidingWindow(kWindow)) {
     net.on_receive = [this](std::string_view d) { receive(d); };
-    net.every(10ms, [this] { retransmit_late(); });
+    net.every(2ms, [this] { retransmit_late(); });
   }
 
   void send(unsigned to, Bytes msg) {
@@ -68,13 +68,14 @@ private:
 
   struct Message {
     Bytes data;
-    Clock::time_point at{}; // last transmission
-    bool acked = false;
+    Clock::time_point at{};            // last transmission
+    bool acked = false, again = false; // again: transmitted more than once
   };
   // queue[i] is message base + i; messages below `sent` have been transmitted.
   struct Link {
     uint32_t base = 0, sent = 0;
     std::deque<Message> queue;
+    Clock::duration srtt{}, rttvar{}, timeout = 50ms;
   };
 
   std::vector<Link> out;
@@ -88,8 +89,9 @@ private:
     return d;
   }
 
-  void transmit(unsigned to, uint32_t seq, Message &m) {
+  void transmit(unsigned to, uint32_t seq, Message &m, bool again = false) {
     m.at = Clock::now();
+    m.again |= again;
     net.send(to, header(DATA, net.self, seq) + m.data);
   }
 
@@ -105,12 +107,29 @@ private:
     Clock::time_point now = Clock::now();
     for (unsigned to = 0; to < net.n; to++) {
       Link &l = out[to];
+      bool late = false;
       for (uint32_t seq = l.base; seq < l.sent; seq++) {
         Message &m = l.queue[seq - l.base];
-        if (!m.acked && now - m.at >= kTimeout)
-          transmit(to, seq, m);
+        if (!m.acked && now - m.at >= l.timeout) {
+          transmit(to, seq, m, true);
+          late = true;
+        }
       }
+      if (late)
+        l.timeout = std::min<Clock::duration>(2 * l.timeout, 1s);
     }
+  }
+
+  // just like in TCP (RFC 6298) - only messages transmitted once are measured
+  static void measure(Link &l, Clock::duration sample) {
+    if (l.srtt == Clock::duration::zero()) {
+      l.srtt = sample;
+      l.rttvar = sample / 2;
+    } else {
+      l.rttvar = (3 * l.rttvar + (l.srtt > sample ? l.srtt - sample : sample - l.srtt)) / 4;
+      l.srtt = (7 * l.srtt + sample) / 8;
+    }
+    l.timeout = std::clamp<Clock::duration>(l.srtt + 4 * l.rttvar, 2ms, 1s);
   }
 
   void receive(std::string_view d) {
@@ -140,6 +159,8 @@ private:
     Message &acked = l.queue[seq - l.base];
     acked.acked = true;
     acked.data.clear();
+    if (!acked.again)
+      measure(l, Clock::now() - acked.at);
     while (!l.queue.empty() && l.queue.front().acked) {
       l.queue.pop_front();
       l.base++;
