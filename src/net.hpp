@@ -131,6 +131,12 @@ public:
       : self(o.self), n(static_cast<unsigned>(o.peers.size())), peers(o.peers),
         loss(o.loss), rng(std::random_device{}()) {
     fd = socket(AF_INET, SOCK_DGRAM, 0);
+    for (int size = 8 << 20; size >= 256 << 10; size /= 2)
+      if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &size, sizeof size) == 0)
+        break;
+    for (int size = 8 << 20; size >= 256 << 10; size /= 2)
+      if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &size, sizeof size) == 0)
+        break;
     if (fd < 0 || bind(fd, reinterpret_cast<const sockaddr *>(&peers[self]),
                        sizeof(sockaddr_in)) < 0) {
       std::perror("bind");
