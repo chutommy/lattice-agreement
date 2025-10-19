@@ -25,6 +25,9 @@ using Bytes = std::string;
 using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
+constexpr size_t kBatch = 1400;       // input lines sent together, in bytes
+constexpr size_t kMaxDatagram = 9000; // macOS refuses UDP datagrams over 9216 bytes
+
 inline void put8(Bytes &b, uint8_t v) { b.push_back(static_cast<char>(v)); }
 
 inline void put32(Bytes &b, uint32_t v) {
@@ -57,6 +60,14 @@ struct Reader {
     return x;
   }
 };
+
+template <class F> void for_each_line(std::string_view text, F f) {
+  while (!text.empty()) {
+    size_t end = text.find('\n');
+    f(text.substr(0, end));
+    text.remove_prefix(end == std::string_view::npos ? text.size() : end + 1);
+  }
+}
 
 struct Options {
   unsigned self = 0; // 0-based
@@ -132,6 +143,8 @@ public:
   Net &operator=(const Net &) = delete;
 
   void send(unsigned to, std::string_view datagram) {
+    if (datagram.size() > kMaxDatagram)
+      die("message too large for one datagram");
     if (loss > 0 && std::uniform_real_distribution<double>(0, 1)(rng) < loss)
       return;
     sendto(fd, datagram.data(), datagram.size(), 0,
@@ -207,13 +220,20 @@ public:
     buf.append(chunk, static_cast<size_t>(len));
   }
 
-  // the next line, without the newline
-  std::string_view line() {
-    const char *nl = static_cast<const char *>(std::memchr(buf.data() + start, '\n', buf.size() - start));
-    size_t end = static_cast<size_t>(nl - buf.data());
-    std::string_view l(buf.data() + start, end - start);
-    start = end + 1;
-    return l;
+  std::string_view batch(size_t max) {
+    size_t end = start;
+    for (;;) {
+      const char *nl = static_cast<const char *>(std::memchr(buf.data() + end, '\n', buf.size() - end));
+      if (!nl)
+        break;
+      size_t next = static_cast<size_t>(nl - buf.data()) + 1;
+      if (end > start && next - start > max)
+        break;
+      end = next;
+    }
+    std::string_view b(buf.data() + start, end - start);
+    start = end;
+    return b;
   }
 
 private:
@@ -227,6 +247,13 @@ public:
   void line(std::string_view s) {
     buf += s;
     buf += '\n';
+  }
+  void lines(unsigned from, std::string_view text) {
+    for_each_line(text, [&](std::string_view l) {
+      buf += std::to_string(from + 1);
+      buf += ' ';
+      line(l);
+    });
   }
   void flush() {
     size_t done = 0;
@@ -250,8 +277,8 @@ inline volatile std::sig_atomic_t stopping = 0;
 class Loop {
 public:
   // run until SIGINT or SIGTERM.
-  // `consume` gets the input line by line.
-  static void run(Net &net, Output &out,
+  // `consume` gets the input in batches of whole lines of at most `batch` bytes.
+  static void run(Net &net, Output &out, size_t batch,
                   const std::function<void(std::string_view)> &consume) {
     struct sigaction sa{};
     sa.sa_handler = [](int) { stopping = 1; };
@@ -278,7 +305,7 @@ public:
       if (r > 0 && want && FD_ISSET(STDIN_FILENO, &fds))
         in.fill();
       while (in.has_line())
-        consume(in.line());
+        consume(in.batch(batch));
       net.run_timers();
       out.flush();
     }
