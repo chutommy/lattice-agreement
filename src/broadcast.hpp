@@ -1,8 +1,9 @@
 #pragma once
 
-// Uniform reliable broadcast
-// https://chutommy.com/dist-algorithms#uniform-reliable-broadcast
+// FIFO uniform reliable broadcast
+// https://chutommy.com/dist-algorithms#fifo-uniform-broadcast
 
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -76,6 +77,54 @@ private:
     if (++e.copies * 2 > n && !e.delivered) {
       e.delivered = true;
       on_deliver(origin, r.rest);
+    }
+  }
+};
+
+// FIFO order: messages from an origin are delivered in the order it broadcast.
+class FifoBroadcast {
+public:
+  std::function<void(unsigned origin, std::string_view msg)> on_deliver;
+
+  explicit FifoBroadcast(PerfectLinks &pl) : urb(pl), origins(pl.net.n) {
+    urb.on_deliver = [this](unsigned origin, std::string_view msg) {
+      receive(origin, msg);
+    };
+  }
+
+  void broadcast(std::string_view msg) {
+    Bytes d;
+    put32(d, next_seq++);
+    d += msg;
+    urb.broadcast(d);
+  }
+
+private:
+  struct Origin {
+    uint32_t next = 0;
+    std::map<uint32_t, Bytes> early;
+  };
+
+  UniformReliableBroadcast urb;
+  uint32_t next_seq = 0;
+  std::vector<Origin> origins;
+
+  void receive(unsigned origin, std::string_view d) {
+    Reader r{d};
+    uint32_t seq = r.u32();
+    if (!r.ok)
+      return;
+    Origin &o = origins[origin];
+    if (seq != o.next) {
+      o.early.emplace(seq, r.rest);
+      return;
+    }
+    on_deliver(origin, r.rest);
+    o.next++;
+    for (auto it = o.early.begin(); it != o.early.end() && it->first == o.next;
+         it = o.early.erase(it)) {
+      on_deliver(origin, it->second);
+      o.next++;
     }
   }
 };
