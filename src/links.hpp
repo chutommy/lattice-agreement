@@ -60,6 +60,10 @@ public:
   }
 
   void send(unsigned to, Bytes msg) {
+    if (to == net.self) {
+      on_deliver(net.self, msg);
+      return;
+    }
     out[to].queue.push_back({std::move(msg)});
     transmit_window(to);
   }
@@ -139,7 +143,7 @@ private:
     Reader r{d};
     uint8_t kind = r.u8();
     uint32_t from = r.u32(), seq = r.u32();
-    if (!r.ok || from >= net.n)
+    if (!r.ok || from >= net.n || from == net.self)
       return;
     if (kind == ACK) {
       acknowledged(from, seq);
