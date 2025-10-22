@@ -2,10 +2,11 @@
 """Run a group of processes on this machine, time it, and check what every
 process printed against the guarantees of the algorithm.
 
-    bench/run.py links -n 3 -m 10000
     bench/run.py links -n 3 -m 10000 --loss 0.1
+    bench/run.py broadcast -n 5 -m 100000
 
-links sends messages 1..m to every other process.
+links sends messages 1..m to every other process, broadcast broadcasts 1..m from
+every process.
 """
 
 import argparse
@@ -21,11 +22,13 @@ PORT = 11000
 
 
 def make_input(program, i, n, m):
-    return "".join(f"{j} {k}\n" for k in range(1, m + 1) for j in range(1, n + 1) if j != i)
+    if program == "links":
+        return "".join(f"{j} {k}\n" for k in range(1, m + 1) for j in range(1, n + 1) if j != i)
+    return "".join(f"{k}\n" for k in range(1, m + 1))
 
 
 def expected(program, n, m):
-    return (n - 1) * m
+    return {"links": (n - 1) * m, "broadcast": n * m}[program]
 
 
 def check(program, n, m, outs):
@@ -38,9 +41,17 @@ def check(program, n, m, outs):
         for i in outs:
             ks = got[j][i]
             assert len(ks) == len(set(ks)), f"no duplication: {j} printed a message from {i} twice"
-            assert all(1 <= k <= m for k in ks) and (i != j or not ks), f"no creation: {j} printed a message {i} never sent"
-            if i != j:
+            assert all(1 <= k <= m for k in ks) and (program == "broadcast" or i != j or not ks), f"no creation: {j} printed a message {i} never sent"
+            if program == "links" and i != j:
                 assert sorted(ks) == list(range(1, m + 1)), f"reliable delivery: {j} is missing messages from {i}"
+            if program == "broadcast":
+                assert ks == list(range(1, len(ks) + 1)), f"FIFO order: {j} printed messages from {i} out of order"
+    if program == "broadcast":
+        for i in outs:
+            most = max(len(got[j][i]) for j in outs)
+            assert most == m, f"validity: messages from {i} were not all delivered"
+            for j in outs:
+                assert len(got[j][i]) == most, f"uniform agreement: {j} missed messages from {i} delivered elsewhere"
 
 
 def run(program, n=3, m=10000, loss=0.0, timeout=60):
@@ -92,7 +103,7 @@ def run(program, n=3, m=10000, loss=0.0, timeout=60):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("program", choices=["links"])
+    parser.add_argument("program", choices=["links", "broadcast"])
     parser.add_argument("-n", type=int, default=3, help="processes (default 3)")
     parser.add_argument("-m", type=int, default=10000, help="messages per process (default 10000)")
     parser.add_argument("--loss", type=float, default=0.0, help="fraction of datagrams dropped")
@@ -101,7 +112,7 @@ def main():
         seconds = run(a.program, a.n, a.m, a.loss)
     except (AssertionError, TimeoutError) as e:
         sys.exit(f"FAILED: {e}")
-    count = (a.n - 1) * a.n * a.m
+    count = {"links": (a.n - 1) * a.n * a.m, "broadcast": a.n * a.m}[a.program]
     print(f"OK: {count:,} messages in {seconds:.2f} s, {count / seconds:,.0f} messages/s")
 
 
