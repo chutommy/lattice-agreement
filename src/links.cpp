@@ -27,5 +27,5 @@ int main(int argc, char **argv) {
         pl.send(q, std::move(to[q]));
   };
 
-  Loop::run(net, out, kBatch, send);
+  Loop::run(net, out, kBatch, [] { return true; }, send);
 }

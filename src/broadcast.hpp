@@ -86,7 +86,8 @@ class FifoBroadcast {
 public:
   std::function<void(unsigned origin, std::string_view msg)> on_deliver;
 
-  explicit FifoBroadcast(PerfectLinks &pl) : urb(pl), origins(pl.net.n) {
+  explicit FifoBroadcast(PerfectLinks &pl)
+      : urb(pl), self(pl.net.self), origins(pl.net.n) {
     urb.on_deliver = [this](unsigned origin, std::string_view msg) {
       receive(origin, msg);
     };
@@ -99,6 +100,9 @@ public:
     urb.broadcast(d);
   }
 
+  // own messages broadcast, not yet delivered here
+  uint32_t in_flight() const { return next_seq - origins[self].next; }
+
 private:
   struct Origin {
     uint32_t next = 0;
@@ -106,6 +110,7 @@ private:
   };
 
   UniformReliableBroadcast urb;
+  unsigned self;
   uint32_t next_seq = 0;
   std::vector<Origin> origins;
 

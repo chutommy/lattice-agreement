@@ -283,8 +283,10 @@ inline volatile std::sig_atomic_t stopping = 0;
 class Loop {
 public:
   // run until SIGINT or SIGTERM.
-  // `consume` gets the input in batches of whole lines of at most `batch` bytes.
+  // `consume` gets the input in batches of whole lines of at most `batch` bytes,
+  // as long as `ready` allows.
   static void run(Net &net, Output &out, size_t batch,
+                  const std::function<bool()> &ready,
                   const std::function<void(std::string_view)> &consume) {
     struct sigaction sa{};
     sa.sa_handler = [](int) { stopping = 1; };
@@ -294,7 +296,7 @@ public:
 
     Input in;
     while (!stopping) {
-      bool want = !in.eof() && !in.has_line();
+      bool want = !in.eof() && !in.has_line() && ready();
       fd_set fds;
       FD_ZERO(&fds);
       FD_SET(net.fd, &fds);
@@ -310,7 +312,7 @@ public:
         net.receive();
       if (r > 0 && want && FD_ISSET(STDIN_FILENO, &fds))
         in.fill();
-      while (in.has_line())
+      while (ready() && in.has_line())
         consume(in.batch(batch));
       net.run_timers();
       out.flush();
