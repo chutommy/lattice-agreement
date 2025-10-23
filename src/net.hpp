@@ -157,6 +157,9 @@ public:
            reinterpret_cast<const sockaddr *>(&peers[to]), sizeof(sockaddr_in));
   }
 
+  // run `f` after the current event: a message to self must not re-enter handler
+  void defer(std::function<void()> f) { deferred.push_back(std::move(f)); }
+
   void every(Clock::duration period, std::function<void()> f) {
     timers.push_back({period, Clock::now() + period, std::move(f)});
   }
@@ -172,6 +175,7 @@ private:
   std::vector<sockaddr_in> peers;
   double loss;
   std::mt19937_64 rng;
+  std::vector<std::function<void()>> deferred;
   std::vector<Timer> timers;
 
   void receive() {
@@ -181,6 +185,14 @@ private:
       if (len < 0)
         break;
       on_receive(std::string_view(buf, static_cast<size_t>(len)));
+    }
+  }
+  void run_deferred() {
+    while (!deferred.empty()) {
+      std::vector<std::function<void()>> now;
+      now.swap(deferred);
+      for (auto &f : now)
+        f();
     }
   }
   void run_timers() {
@@ -312,9 +324,13 @@ public:
         net.receive();
       if (r > 0 && want && FD_ISSET(STDIN_FILENO, &fds))
         in.fill();
-      while (ready() && in.has_line())
+      net.run_deferred();
+      while (ready() && in.has_line()) {
         consume(in.batch(batch));
+        net.run_deferred();
+      }
       net.run_timers();
+      net.run_deferred();
       out.flush();
     }
     out.flush();

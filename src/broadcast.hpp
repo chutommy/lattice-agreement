@@ -3,8 +3,8 @@
 // FIFO uniform reliable broadcast
 // https://chutommy.com/dist-algorithms#fifo-uniform-broadcast
 
+#include <deque>
 #include <map>
-#include <unordered_map>
 #include <vector>
 
 #include "links.hpp"
@@ -39,13 +39,13 @@ public:
   std::function<void(unsigned origin, std::string_view msg)> on_deliver;
 
   explicit UniformReliableBroadcast(PerfectLinks &pl)
-      : beb(pl), n(pl.net.n), self(pl.net.self), entries(n) {
+      : beb(pl), n(pl.net.n), self(pl.net.self), origins(n) {
     beb.on_deliver = [this](unsigned, std::string_view msg) { receive(msg); };
   }
 
   void broadcast(std::string_view msg) {
     uint32_t seq = next_seq++;
-    entries[self][seq].relayed = true; // this broadcast is its relay
+    entry(self, seq).relayed = true; // this broadcast is its relay
     Bytes d;
     put32(d, self);
     put32(d, seq);
@@ -58,18 +58,31 @@ private:
     unsigned copies = 0; // one from each process that relayed it
     bool relayed = false, delivered = false;
   };
+  // entries[i] is message base + i
+  // everything below base already delivered
+  struct Origin {
+    uint32_t base = 0;
+    std::deque<Entry> entries;
+  };
 
   BestEffortBroadcast beb;
   unsigned n, self;
   uint32_t next_seq = 0;
-  std::vector<std::unordered_map<uint32_t, Entry>> entries; // per origin
+  std::vector<Origin> origins;
+
+  Entry &entry(unsigned origin, uint32_t seq) {
+    Origin &o = origins[origin];
+    if (seq - o.base >= o.entries.size())
+      o.entries.resize(seq - o.base + 1);
+    return o.entries[seq - o.base];
+  }
 
   void receive(std::string_view d) {
     Reader r{d};
     uint32_t origin = r.u32(), seq = r.u32();
-    if (!r.ok || origin >= n)
+    if (!r.ok || origin >= n || seq < origins[origin].base)
       return;
-    Entry &e = entries[origin][seq];
+    Entry &e = entry(origin, seq);
     if (!e.relayed) {
       e.relayed = true;
       beb.broadcast(Bytes(d));
@@ -77,6 +90,11 @@ private:
     if (++e.copies * 2 > n && !e.delivered) {
       e.delivered = true;
       on_deliver(origin, r.rest);
+    }
+    Origin &o = origins[origin];
+    while (!o.entries.empty() && o.entries.front().delivered) {
+      o.entries.pop_front();
+      o.base++;
     }
   }
 };

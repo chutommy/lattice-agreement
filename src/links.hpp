@@ -61,7 +61,7 @@ public:
 
   void send(unsigned to, Bytes msg) {
     if (to == net.self) {
-      on_deliver(net.self, msg);
+      net.defer([this, msg = std::move(msg)] { on_deliver(net.self, msg); });
       return;
     }
     out[to].queue.push_back({std::move(msg)});
