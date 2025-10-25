@@ -76,7 +76,12 @@ private:
   }
 
   static Set read_set(Reader &r) {
-    Set s(r.u32());
+    uint32_t size = r.u32();
+    if (size > r.rest.size() / 4) { // every value takes at least four bytes
+      r.ok = false;
+      return {};
+    }
+    Set s(size);
     for (std::string &v : s)
       if (r.ok)
         v = r.take(r.u32());
