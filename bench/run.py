@@ -2,12 +2,11 @@
 """Run a group of processes on this machine, optionally with faults, time it, and
 check what every process printed against the guarantees of the algorithm.
 
-    bench/run.py links -n 3 -m 10000 --loss 0.1
     bench/run.py broadcast -n 5 -m 100000
-    bench/run.py broadcast -n 5 -m 100000 --crash 2 --pause
+    bench/run.py lattice -n 5 -m 2000 --crash 2 --pause
 
 links sends messages 1..m to every other process, broadcast broadcasts 1..m from
-every process.
+every process, and lattice proposes m random sets of numbers from every process.
 """
 
 import argparse
@@ -22,20 +21,37 @@ from pathlib import Path
 
 BIN = Path(__file__).resolve().parent.parent / "bin"
 PORT = 11000
+VALUES, DISTINCT = 10, 100  # lattice proposals: up to VALUES numbers below DISTINCT
 
 
-def make_input(program, i, n, m):
+def make_input(program, i, n, m, rng):
     if program == "links":
         return "".join(f"{j} {k}\n" for k in range(1, m + 1) for j in range(1, n + 1) if j != i)
-    return "".join(f"{k}\n" for k in range(1, m + 1))
+    if program == "broadcast":
+        return "".join(f"{k}\n" for k in range(1, m + 1))
+    return "".join(" ".join(map(str, rng.sample(range(DISTINCT), rng.randint(1, VALUES)))) + "\n" for _ in range(m))
 
 
 def expected(program, n, m):
-    return {"links": (n - 1) * m, "broadcast": n * m}[program]
+    return {"links": (n - 1) * m, "broadcast": n * m, "lattice": m}[program]
 
 
-def check(program, n, m, outs, crashed):
+def check(program, n, m, ins, outs, crashed):
     correct = [i for i in outs if i not in crashed]
+    if program == "lattice":
+        proposals = {i: [set(l.split()) for l in ins[i].splitlines()] for i in ins}
+        decisions = {i: [set(l.split()) for l in outs[i].splitlines()] for i in outs}
+        for i in correct:
+            assert len(decisions[i]) == m, f"termination: {i} decided {len(decisions[i])} of {m}"
+        for k in range(m):
+            union = set().union(*(proposals[i][k] for i in proposals))
+            decided = [(i, d[k]) for i, d in decisions.items() if k < len(d)]
+            for i, d in decided:
+                assert proposals[i][k] <= d <= union, f"validity: instance {k + 1} at {i}"
+            for a, (i, x) in enumerate(decided):
+                for j, y in decided[a + 1 :]:
+                    assert x <= y or y <= x, f"consistency: instance {k + 1} at {i} and {j}"
+        return
     got = {j: {i: [] for i in outs} for j in outs}  # got[j][i]: messages from i printed by j
     for j, text in outs.items():
         for line in text.splitlines():
@@ -64,8 +80,9 @@ def run(program, n=3, m=10000, loss=0.0, pause=False, crash=0, seed=None, timeou
     addresses = [f"127.0.0.1:{PORT + i}" for i in range(1, n + 1)]
     flags = ["--loss", str(loss)] if loss else []
     ids = range(1, n + 1)
+    ins = {i: make_input(program, i, n, m, rng) for i in ids}
     for i in ids:
-        (tmp / f"{i}.in").write_text(make_input(program, i, n, m))
+        (tmp / f"{i}.in").write_text(ins[i])
 
     procs = {}
     start = time.monotonic()
@@ -104,7 +121,7 @@ def run(program, n=3, m=10000, loss=0.0, pause=False, crash=0, seed=None, timeou
                 # wait until the outputs meet every guarantee
                 checked_at = now
                 try:
-                    check(program, n, m, {i: (tmp / f"{i}.out").read_text() for i in ids}, crashed)
+                    check(program, n, m, ins, {i: (tmp / f"{i}.out").read_text() for i in ids}, crashed)
                     break
                 except AssertionError as e:
                     failure = e
@@ -127,18 +144,22 @@ def run(program, n=3, m=10000, loss=0.0, pause=False, crash=0, seed=None, timeou
     errors = "".join((tmp / f"{i}.err").read_text() for i in ids)
     try:
         assert not errors, errors
-        check(program, n, m, outs, crashed)
+        check(program, n, m, ins, outs, crashed)
     except AssertionError as e:
         raise AssertionError(f"{e} (outputs in {tmp})") from None
     shutil.rmtree(tmp)
     return finished
 
 
+def units(program, n, m):
+    return {"links": ((n - 1) * n * m, "messages"), "broadcast": (n * m, "messages"), "lattice": (m, "instances")}[program]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("program", choices=["links", "broadcast"])
+    parser.add_argument("program", choices=["links", "broadcast", "lattice"])
     parser.add_argument("-n", type=int, default=3, help="processes (default 3)")
-    parser.add_argument("-m", type=int, default=10000, help="messages per process (default 10000)")
+    parser.add_argument("-m", type=int, default=10000, help="messages or proposals per process (default 10000)")
     parser.add_argument("--loss", type=float, default=0.0, help="fraction of datagrams dropped")
     parser.add_argument("--pause", action="store_true", help="pause and resume processes at random")
     parser.add_argument("--crash", type=int, default=0, help="processes to kill at random")
@@ -152,9 +173,9 @@ def main():
         sys.exit(f"FAILED: {e}")
     if seconds is None:
         print("OK")
-        return
-    count = {"links": (a.n - 1) * a.n * a.m, "broadcast": a.n * a.m}[a.program]
-    print(f"OK: {count:,} messages in {seconds:.2f} s, {count / seconds:,.0f} messages/s")
+    else:
+        count, name = units(a.program, a.n, a.m)
+        print(f"OK: {count:,} {name} in {seconds:.2f} s, {count / seconds:,.0f} {name}/s")
 
 
 if __name__ == "__main__":
