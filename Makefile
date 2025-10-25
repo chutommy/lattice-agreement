@@ -1,6 +1,6 @@
 CXXFLAGS = -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
-all: bin/links bin/broadcast
+all: bin/links bin/broadcast bin/lattice
 
 bin/%: src/%.cpp src/*.hpp
 	@mkdir -p bin
