@@ -6,6 +6,7 @@ Perfect links, FIFO uniform reliable broadcast and lattice agreement over UDP, w
 |---|---|---|
 | `links` | [Perfect links][pl] | Sequence numbers and per-message ACKs. Fast retransmit and an adaptive timeout, as in TCP. |
 | `broadcast` | [FIFO uniform reliable broadcast][furb] | Three layers over perfect links: [best-effort][beb], [majority-ack][urb], [sequence numbers][fifo]. |
+| `broadcast --fused` | [FIFO uniform reliable broadcast][furb] | One layer over raw UDP. Each message carries its ACK set and is resent every 20 ms. |
 | `lattice` | [Lattice agreement][la] | [Proposer-acceptor][pa] over perfect links. One instance per input line. |
 
 ## Usage

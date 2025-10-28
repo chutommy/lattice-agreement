@@ -73,6 +73,7 @@ struct Options {
   unsigned self = 0; // 0-based
   std::vector<sockaddr_in> peers;
   double loss = 0; // fraction of outgoing datagrams dropped on purpose
+  bool fused = false;
 };
 
 [[noreturn]] inline void die(const char *what) {
@@ -105,6 +106,8 @@ inline Options options(int argc, char **argv, const char *usage) {
     std::string a = argv[i];
     if (a == "--loss" && i + 1 < argc)
       o.loss = std::atof(argv[++i]);
+    else if (a == "--fused" && std::strstr(usage, "--fused"))
+      o.fused = true;
     else if (a.size() > 1 && a[0] == '-')
       die(usage);
     else

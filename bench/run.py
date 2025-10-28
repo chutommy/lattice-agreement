@@ -3,6 +3,7 @@
 check what every process printed against the guarantees of the algorithm.
 
     bench/run.py broadcast -n 5 -m 100000
+    bench/run.py broadcast -n 5 -m 100000 --fused --loss 0.05
     bench/run.py lattice -n 5 -m 2000 --crash 2 --pause
 
 links sends messages 1..m to every other process, broadcast broadcasts 1..m from
@@ -74,11 +75,11 @@ def check(program, n, m, ins, outs, crashed):
                 assert len(got[j][i]) == most, f"uniform agreement: {j} missed messages from {i} delivered elsewhere"
 
 
-def run(program, n=3, m=10000, loss=0.0, pause=False, crash=0, seed=None, timeout=120):
+def run(program, n=3, m=10000, fused=False, loss=0.0, pause=False, crash=0, seed=None, timeout=120):
     rng = random.Random(seed)
     tmp = Path(tempfile.mkdtemp(prefix=f"{program}-"))
     addresses = [f"127.0.0.1:{PORT + i}" for i in range(1, n + 1)]
-    flags = ["--loss", str(loss)] if loss else []
+    flags = (["--fused"] if fused else []) + (["--loss", str(loss)] if loss else [])
     ids = range(1, n + 1)
     ins = {i: make_input(program, i, n, m, rng) for i in ids}
     for i in ids:
@@ -160,6 +161,7 @@ def main():
     parser.add_argument("program", choices=["links", "broadcast", "lattice"])
     parser.add_argument("-n", type=int, default=3, help="processes (default 3)")
     parser.add_argument("-m", type=int, default=10000, help="messages or proposals per process (default 10000)")
+    parser.add_argument("--fused", action="store_true", help="broadcast: the single-layer implementation")
     parser.add_argument("--loss", type=float, default=0.0, help="fraction of datagrams dropped")
     parser.add_argument("--pause", action="store_true", help="pause and resume processes at random")
     parser.add_argument("--crash", type=int, default=0, help="processes to kill at random")
@@ -168,7 +170,7 @@ def main():
     if a.crash * 2 >= a.n and a.program != "links":
         parser.error(f"{a.program} needs a majority of correct processes: crash at most {(a.n - 1) // 2}")
     try:
-        seconds = run(a.program, a.n, a.m, a.loss, a.pause, a.crash, a.seed)
+        seconds = run(a.program, a.n, a.m, a.fused, a.loss, a.pause, a.crash, a.seed)
     except (AssertionError, TimeoutError) as e:
         sys.exit(f"FAILED: {e}")
     if seconds is None:
