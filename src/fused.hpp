@@ -69,9 +69,10 @@ private:
     AckSet acks;
     Bytes msg;
   };
-  // copies[i] is message i, below `next` delivered.
+  // copies[i] is message base + i
+  // below `next` delivered, below `base` forgotten.
   struct Origin {
-    uint32_t next = 0;
+    uint32_t base = 0, next = 0;
     std::deque<std::optional<Copy>> copies;
   };
 
@@ -112,8 +113,16 @@ private:
     if (!r.ok || from >= n || origin >= n)
       return;
     Copy c{ttl, origin, seq, AckSet(n, acks), Bytes(r.rest)};
+    Origin &o = origins[origin];
     if (c.acks.has(self)) { // the sender knows this process has it: only learn who else does
-      store_and_deliver(c, false);
+      if (seq >= o.base)
+        store_and_deliver(c, false);
+      return;
+    }
+    if (seq < o.base) { // forgotten, so everyone has it: say so
+      for (unsigned q = 0; q < n; q++)
+        c.acks.add(q);
+      net.send(from, encode(c));
       return;
     }
     c.acks.add(self);
@@ -124,10 +133,10 @@ private:
   }
 
   // Stores the copy or merges its set into the stored one (with `sync`, also back into `c`),
-  // then delivers what a majority has.
+  // then delivers what a majority has and forgets what everyone has.
   void store_and_deliver(Copy &c, bool sync) {
     Origin &o = origins[c.origin];
-    size_t i = c.seq;
+    size_t i = c.seq - o.base;
     if (i >= o.copies.size())
       o.copies.resize(i + 1);
     std::optional<Copy> &stored = o.copies[i];
@@ -140,8 +149,8 @@ private:
     if (sync)
       c.acks.merge(stored->acks);
 
-    while (o.next < o.copies.size()) {
-      const std::optional<Copy> &next = o.copies[o.next];
+    while (o.next - o.base < o.copies.size()) {
+      const std::optional<Copy> &next = o.copies[o.next - o.base];
       if (!next || next->acks.count() * 2 <= n)
         break;
       o.next++;
@@ -153,6 +162,10 @@ private:
           if (q != self)
             net.send(q, d);
       }
+    }
+    while (o.base < o.next && o.copies.front()->acks.count() == n) {
+      o.copies.pop_front();
+      o.base++;
     }
   }
 };
