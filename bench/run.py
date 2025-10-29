@@ -53,6 +53,7 @@ def check(program, n, m, ins, outs, crashed):
                 for j, y in decided[a + 1 :]:
                     assert x <= y or y <= x, f"consistency: instance {k + 1} at {i} and {j}"
         return
+
     got = {j: {i: [] for i in outs} for j in outs}  # got[j][i]: messages from i printed by j
     for j, text in outs.items():
         for line in text.splitlines():
@@ -75,9 +76,10 @@ def check(program, n, m, ins, outs, crashed):
                 assert len(got[j][i]) == most, f"uniform agreement: {j} missed messages from {i} delivered elsewhere"
 
 
-def run(program, n=3, m=10000, fused=False, loss=0.0, pause=False, crash=0, seed=None, timeout=120):
+def run(program, n=3, m=10000, fused=False, loss=0.0, pause=False, crash=0, seed=None, timeout=120, keep=None):
     rng = random.Random(seed)
-    tmp = Path(tempfile.mkdtemp(prefix=f"{program}-"))
+    tmp = Path(keep or tempfile.mkdtemp(prefix=f"{program}-"))
+    tmp.mkdir(parents=True, exist_ok=True)
     addresses = [f"127.0.0.1:{PORT + i}" for i in range(1, n + 1)]
     flags = (["--fused"] if fused else []) + (["--loss", str(loss)] if loss else [])
     ids = range(1, n + 1)
@@ -148,7 +150,8 @@ def run(program, n=3, m=10000, fused=False, loss=0.0, pause=False, crash=0, seed
         check(program, n, m, ins, outs, crashed)
     except AssertionError as e:
         raise AssertionError(f"{e} (outputs in {tmp})") from None
-    shutil.rmtree(tmp)
+    if not keep:
+        shutil.rmtree(tmp)
     return finished
 
 
@@ -166,11 +169,12 @@ def main():
     parser.add_argument("--pause", action="store_true", help="pause and resume processes at random")
     parser.add_argument("--crash", type=int, default=0, help="processes to kill at random")
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--keep", help="directory to keep inputs and outputs in")
     a = parser.parse_args()
     if a.crash * 2 >= a.n and a.program != "links":
         parser.error(f"{a.program} needs a majority of correct processes: crash at most {(a.n - 1) // 2}")
     try:
-        seconds = run(a.program, a.n, a.m, a.fused, a.loss, a.pause, a.crash, a.seed)
+        seconds = run(a.program, a.n, a.m, a.fused, a.loss, a.pause, a.crash, a.seed, keep=a.keep)
     except (AssertionError, TimeoutError) as e:
         sys.exit(f"FAILED: {e}")
     if seconds is None:
