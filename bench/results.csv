@@ -1,0 +1,109 @@
+experiment,program,processes,loss,trial,delivered,seconds,datagrams
+scaling,broadcast,3,0.0,1,600000,0.385,33411
+scaling,broadcast,3,0.0,2,600000,0.379,33324
+scaling,broadcast,3,0.0,3,600000,0.378,33544
+scaling,broadcast --fused,3,0.0,1,600000,0.386,34335
+scaling,broadcast --fused,3,0.0,2,600000,0.392,34781
+scaling,broadcast --fused,3,0.0,3,600000,0.400,34724
+scaling,broadcast,4,0.0,1,600000,0.717,64633
+scaling,broadcast,4,0.0,2,600000,0.689,64615
+scaling,broadcast,4,0.0,3,600000,0.693,64600
+scaling,broadcast --fused,4,0.0,1,600000,0.940,89836
+scaling,broadcast --fused,4,0.0,2,600000,0.971,93223
+scaling,broadcast --fused,4,0.0,3,600000,0.954,91869
+scaling,broadcast,5,0.0,1,600000,1.097,104474
+scaling,broadcast,5,0.0,2,600000,1.083,104436
+scaling,broadcast,5,0.0,3,600000,1.090,104612
+scaling,broadcast --fused,5,0.0,1,600000,4.823,459848
+scaling,broadcast --fused,5,0.0,2,600000,4.815,464535
+scaling,broadcast --fused,5,0.0,3,600000,4.886,471315
+scaling,broadcast,6,0.0,1,600000,1.578,152323
+scaling,broadcast,6,0.0,2,600000,1.603,152318
+scaling,broadcast,6,0.0,3,600000,1.598,152515
+scaling,broadcast --fused,6,0.0,1,600000,4.334,574834
+scaling,broadcast --fused,6,0.0,2,600000,4.277,562545
+scaling,broadcast --fused,6,0.0,3,600000,4.340,564809
+scaling,broadcast,7,0.0,1,599998,2.196,212928
+scaling,broadcast,7,0.0,2,599998,2.204,212604
+scaling,broadcast,7,0.0,3,599998,2.240,213262
+scaling,broadcast --fused,7,0.0,1,599998,4.883,805301
+scaling,broadcast --fused,7,0.0,2,599998,4.785,789320
+scaling,broadcast --fused,7,0.0,3,599998,4.594,773571
+scaling,broadcast,8,0.0,1,600000,2.939,284523
+scaling,broadcast,8,0.0,2,600000,2.937,284037
+scaling,broadcast,8,0.0,3,600000,2.928,283692
+scaling,broadcast --fused,8,0.0,1,600000,6.275,1136250
+scaling,broadcast --fused,8,0.0,2,600000,6.196,1134182
+scaling,broadcast --fused,8,0.0,3,600000,6.002,1093379
+scaling,broadcast,9,0.0,1,599994,3.808,367205
+scaling,broadcast,9,0.0,2,599994,3.783,365132
+scaling,broadcast,9,0.0,3,599994,3.827,365720
+scaling,broadcast --fused,9,0.0,1,599994,8.168,1514222
+scaling,broadcast --fused,9,0.0,2,599994,8.387,1564032
+scaling,broadcast --fused,9,0.0,3,599994,8.398,1586402
+loss,broadcast,5,0.0,1,500000,0.885,84740
+loss,broadcast,5,0.0,2,500000,0.884,84706
+loss,broadcast,5,0.0,3,500000,0.896,84545
+loss,broadcast --fused,5,0.0,1,500000,3.566,351540
+loss,broadcast --fused,5,0.0,2,500000,3.789,355295
+loss,broadcast --fused,5,0.0,3,500000,3.803,363794
+loss,broadcast,5,0.05,1,500000,0.934,86764
+loss,broadcast,5,0.05,2,500000,0.944,88172
+loss,broadcast,5,0.05,3,500000,0.935,87581
+loss,broadcast --fused,5,0.05,1,500000,2.765,270743
+loss,broadcast --fused,5,0.05,2,500000,2.699,265210
+loss,broadcast --fused,5,0.05,3,500000,2.692,263952
+loss,broadcast,5,0.1,1,500000,0.919,88064
+loss,broadcast,5,0.1,2,500000,0.946,89773
+loss,broadcast,5,0.1,3,500000,0.935,89762
+loss,broadcast --fused,5,0.1,1,500000,2.060,200319
+loss,broadcast --fused,5,0.1,2,500000,2.062,201602
+loss,broadcast --fused,5,0.1,3,500000,2.095,202781
+loss,broadcast,5,0.15,1,500000,0.935,87598
+loss,broadcast,5,0.15,2,500000,0.914,87833
+loss,broadcast,5,0.15,3,500000,0.887,80903
+loss,broadcast --fused,5,0.15,1,500000,1.636,157409
+loss,broadcast --fused,5,0.15,2,500000,1.564,152265
+loss,broadcast --fused,5,0.15,3,500000,1.648,158047
+loss,broadcast,5,0.2,1,500000,0.919,86451
+loss,broadcast,5,0.2,2,500000,0.869,82237
+loss,broadcast,5,0.2,3,500000,1.072,90993
+loss,broadcast --fused,5,0.2,1,500000,1.184,113926
+loss,broadcast --fused,5,0.2,2,500000,1.232,117582
+loss,broadcast --fused,5,0.2,3,500000,1.214,116012
+loss,broadcast,5,0.25,1,500000,0.815,72445
+loss,broadcast,5,0.25,2,500000,1.070,85770
+loss,broadcast,5,0.25,3,500000,2.282,84990
+loss,broadcast --fused,5,0.25,1,500000,0.870,81021
+loss,broadcast --fused,5,0.25,2,500000,0.849,81159
+loss,broadcast --fused,5,0.25,3,500000,0.876,80394
+loss,broadcast,5,0.3,1,500000,1.260,73707
+loss,broadcast,5,0.3,2,500000,1.143,84432
+loss,broadcast,5,0.3,3,500000,3.083,99590
+loss,broadcast --fused,5,0.3,1,500000,0.826,55707
+loss,broadcast --fused,5,0.3,2,500000,0.759,54498
+loss,broadcast --fused,5,0.3,3,500000,0.757,55124
+loss,broadcast,5,0.35,1,500000,8.357,104428
+loss,broadcast,5,0.35,2,500000,4.444,95041
+loss,broadcast,5,0.35,3,500000,7.409,102198
+loss,broadcast --fused,5,0.35,1,500000,1.012,53358
+loss,broadcast --fused,5,0.35,2,500000,1.030,53271
+loss,broadcast --fused,5,0.35,3,500000,1.022,52814
+loss,broadcast,5,0.4,1,500000,6.226,97686
+loss,broadcast,5,0.4,2,500000,14.135,90975
+loss,broadcast,5,0.4,3,500000,16.386,105859
+loss,broadcast --fused,5,0.4,1,500000,1.323,52358
+loss,broadcast --fused,5,0.4,2,500000,1.277,52184
+loss,broadcast --fused,5,0.4,3,500000,1.240,52248
+loss,links,5,0.0,1,4000000,2.008,195189
+loss,links,5,0.0,2,4000000,1.981,194214
+loss,links,5,0.0,3,4000000,2.034,194637
+loss,lattice,5,0.0,1,3000,5.904,560731
+loss,lattice,5,0.0,2,3000,6.411,611593
+loss,lattice,5,0.0,3,3000,6.244,612510
+loss,links,5,0.2,1,4000000,2.485,218528
+loss,links,5,0.2,2,4000000,5.018,218069
+loss,links,5,0.2,3,4000000,3.223,218414
+loss,lattice,5,0.2,1,3000,4.912,469669
+loss,lattice,5,0.2,2,3000,4.619,455640
+loss,lattice,5,0.2,3,3000,4.476,428208
