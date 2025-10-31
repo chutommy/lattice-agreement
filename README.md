@@ -26,6 +26,35 @@ Start one process per address. Each reads lines from standard input and prints w
 
     bench/run.py broadcast -n 5 -m 100000 --loss 0.1 --pause --crash 2
 
+## Benchmark
+
+Layered against single-layer broadcast. Apple M1 Pro, loopback, median of three runs.
+
+![Throughput and datagrams per message, 3 to 9 processes](bench/broadcast.png)
+
+- Layered throughput falls with n². Every message crosses every pair of processes.
+- From five processes on, the single layer sends four times as many datagrams. Its 20 ms resend fires before the acknowledgements return.
+
+Five processes, each dropping a fraction of its outgoing datagrams. Dropped
+datagrams are not counted as sent.
+
+![Throughput and datagrams per message, 0 to 40% loss](bench/loss.png)
+
+- Up to 20% loss the layered broadcast holds. Fast retransmit recovers a lost datagram without a timeout.
+- Past 30% it collapses. The timeout doubles on every expiry, as in TCP. The links treat loss as congestion.
+- The single layer never waits longer than 20 ms. Loss thins out its redundant resends, and it peaks at 30%.
+
+All programs, five processes:
+
+| | no loss | 20% loss |
+|---|---:|---:|
+| `links`, messages/s | 1,990,000 | 1,240,000 |
+| `broadcast`, messages/s | 565,000 | 544,000 |
+| `broadcast --fused`, messages/s | 132,000 | 412,000 |
+| `lattice`, instances/s | 480 | 649 |
+
+Reproduciable with `bench/bench.py && Rscript bench/plot.R`.
+
 [pl]: https://chutommy.com/dist-algorithms#perfect-links
 [furb]: https://chutommy.com/dist-algorithms#fifo-uniform-broadcast
 [beb]: https://chutommy.com/dist-algorithms#best-effort-broadcast/basic-broadcast
